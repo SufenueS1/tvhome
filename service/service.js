@@ -7,9 +7,10 @@ var https = require('https');
 var vm = require('vm');
 
 var PORT = 8095;
-var CORE_URL = 'https://cdn.jsdelivr.net/gh/SufenueS1/tvhome@main/service/core.js';
+var REPO = 'SufenueS1/tvhome';
+var CDN = 'https://cdn.jsdelivr.net/gh/' + REPO + '@';
 
-var state = { logs: [], core: null, coreError: null, loadedAt: null, loading: false };
+var state = { logs: [], core: null, coreError: null, loadedAt: null, version: null };
 
 function log(msg) {
   state.logs.push(new Date().toISOString() + ' ' + msg);
@@ -28,13 +29,27 @@ function fetchText(url, cb) {
   } catch (e) { cb(e); }
 }
 
+// jsDelivr's @main alias can lag a push by hours; a commit-pinned URL is current at once.
+function latestCommit(cb) {
+  try {
+    https.get({ host: 'api.github.com', path: '/repos/' + REPO + '/commits/main',
+      headers: { 'User-Agent': 'tvhome', Accept: 'application/vnd.github.sha' } }, function (res) {
+      var body = '';
+      res.setEncoding('utf8');
+      res.on('data', function (c) { body += c; });
+      res.on('end', function () { body = body.trim(); cb(res.statusCode === 200 && /^[0-9a-f]{40}$/.test(body) ? body : 'main'); });
+      res.on('error', function () { cb('main'); });
+    }).on('error', function () { cb('main'); });
+  } catch (e) { cb('main'); }
+}
+
 function loadCore(done) {
-  fetchText(CORE_URL, function (err, src) {
+  latestCommit(function (ref) { fetchText(CDN + ref + '/service/core.js', function (err, src) {
     if (err) { state.coreError = String(err); log('core load failed: ' + err); return done && done(err); }
     try {
       var sandbox = { require: require, tizen: tizen, console: console, setTimeout: setTimeout,
         clearTimeout: clearTimeout, setInterval: setInterval, clearInterval: clearInterval,
-        Buffer: Buffer, process: process, module: { exports: {} }, log: log };
+        Buffer: Buffer, process: process, module: { exports: {} }, log: log, coreVersion: ref };
       vm.runInNewContext(src, sandbox, { filename: 'core.js' });
       var next = sandbox.module.exports;
       if (state.core && state.core.dispose) {
@@ -44,14 +59,15 @@ function loadCore(done) {
       if (next.init) next.init();
       state.coreError = null;
       state.loadedAt = new Date().toISOString();
-      log('core loaded');
+      state.version = ref;
+      log('core loaded @' + ref.slice(0, 7));
       if (done) done(null);
     } catch (e) {
       state.coreError = String(e && e.stack || e);
       log('core eval failed: ' + state.coreError);
       if (done) done(e);
     }
-  });
+  }); });
 }
 
 function reply(res, code, obj) {
@@ -67,7 +83,7 @@ var server = http.createServer(function (req, res) {
     if (path === '/__reload') {
       return loadCore(function (err) { reply(res, err ? 500 : 200, { ok: !err, error: state.coreError }); });
     }
-    if (path === '/__logs') return reply(res, 200, { logs: state.logs, coreError: state.coreError, loadedAt: state.loadedAt });
+    if (path === '/__logs') return reply(res, 200, { logs: state.logs, coreError: state.coreError, loadedAt: state.loadedAt, version: state.version });
     if (!state.core) return reply(res, 503, { error: 'core not loaded', coreError: state.coreError });
     state.core.handle(req, res);
   } catch (e) {

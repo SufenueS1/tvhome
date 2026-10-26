@@ -11,13 +11,15 @@
 var url = require('url');
 var fs = require('fs');
 var tls = require('tls');
+var https = require('https');
 var crypto = require('crypto');
 var dgram = require('dgram');
 
 var CONFIG_PATH = '/home/owner/share/tvhome.json';
 var HOME_ORIGIN = 'http://127.0.0.1:8081';
+var CORE_VERSION = typeof coreVersion !== 'undefined' ? coreVersion : null; // set by service.js
 var AGENT_GRACE_MS = 5000; // between polls the agent still counts as online for this long
-var READ_ONLY = { '/apps': 1, '/icon': 1, '/status': 1, '/config': 1 };
+var READ_ONLY = { '/apps': 1, '/icon': 1, '/status': 1, '/config': 1, '/version': 1 };
 var POWER_ACTIONS = ['shutdown', 'restart', 'sleep', 'lock', 'cancel'];
 
 var cfg = {};
@@ -78,6 +80,30 @@ function readBody(req, cb) {
     try { parsed = body ? JSON.parse(body) : {}; } catch (e) { return cb(e); }
     cb(null, parsed);
   }));
+}
+
+// ---- version -------------------------------------------------------------
+// The page bootstrap asks for the latest commit so it can load home.html pinned to it.
+
+var latest = { sha: null, at: 0, waiters: null };
+function latestCommit(cb) {
+  if (latest.sha && Date.now() - latest.at < 60000) return cb(latest.sha);
+  if (latest.waiters) return latest.waiters.push(cb);
+  latest.waiters = [cb];
+  function done(sha) {
+    if (sha) { latest.sha = sha; latest.at = Date.now(); }
+    var ws = latest.waiters; latest.waiters = null;
+    ws.forEach(function (w) { w(latest.sha || CORE_VERSION || 'main'); });
+  }
+  try {
+    https.get({ host: 'api.github.com', path: '/repos/SufenueS1/tvhome/commits/main', timeout: 5000,
+      headers: { 'User-Agent': 'tvhome', Accept: 'application/vnd.github.sha' } }, safe(function (res) {
+      var body = '';
+      res.setEncoding('utf8');
+      res.on('data', safe(function (c) { body += c; }));
+      res.on('end', safe(function () { body = body.trim(); done(res.statusCode === 200 && /^[0-9a-f]{40}$/.test(body) ? body : null); }));
+    })).on('error', safe(function () { done(null); })).on('timeout', function () { this.destroy(); });
+  } catch (e) { done(null); }
 }
 
 // ---- apps ----------------------------------------------------------------
@@ -277,6 +303,8 @@ module.exports.handle = function (req, res) {
     case '/status':
       return send(res, 200, { node: process.version, pcOnline: pcOnline(), pcPaired: !!(cfg.pc && cfg.pc.token),
         tvKeyPaired: !!cfg.tvToken });
+    case '/version':
+      return latestCommit(function (sha) { send(res, 200, { sha: sha, core: CORE_VERSION }); });
     case '/config':
       return send(res, 200, { weather: cfg.weather || null,
         pc: cfg.pc ? { name: cfg.pc.name, online: pcOnline(), canWake: !!cfg.pc.mac } : null });
