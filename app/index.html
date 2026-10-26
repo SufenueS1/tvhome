@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Home (spike)</title>
+<style>
+  body { background: #0b0d12; color: #e8ecf4; font: 28px/1.4 sans-serif; margin: 60px; }
+  h1 { font-size: 48px; margin: 0 0 24px; }
+  #log { font: 22px/1.35 monospace; color: #9fb0c8; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Home spike</h1>
+<div>Leave this screen open. Testing is driven from the PC.</div>
+<div id="log"></div>
+<script>
+var SVC = 'http://127.0.0.1:8095';
+var logEl = document.getElementById('log');
+function show(m) { logEl.textContent = new Date().toLocaleTimeString() + '  ' + m + '\n' + logEl.textContent; }
+function report(k, v) {
+  var x = new XMLHttpRequest();
+  x.open('GET', SVC + '/report?k=' + encodeURIComponent(k) + '&v=' + encodeURIComponent(String(v)));
+  x.send();
+}
+
+var modules = [];
+var tb = null;
+function connectTB() {
+  tb = new WebSocket('ws://127.0.0.1:8081');
+  tb.onopen = function () { show('tb ws open'); tb.send(JSON.stringify({ type: 4, payload: false })); };
+  tb.onmessage = function (ev) {
+    var msg = JSON.parse(ev.data);
+    if (msg.type === 4) {
+      modules = msg.payload || [];
+      var names = modules.map(function (m) { return m.fullName + ':' + m.packageType; }).join(',');
+      show('modules: ' + names); report('modules', names);
+    } else { report('tbmsg' + msg.type, JSON.stringify(msg.payload).slice(0, 200)); }
+  };
+  tb.onerror = function () { show('tb ws error'); report('tbws', 'error'); };
+}
+
+function openModule(fullName) {
+  var m = modules.filter(function (x) { return x.fullName === fullName; })[0];
+  if (!m) { report('open', 'missing ' + fullName); return; }
+  try { (m.keys || []).forEach(function (k) { tizen.tvinputdevice.registerKey(k); }); } catch (e) { report('keys', String(e)); }
+  tb.send(JSON.stringify({ type: 5, payload: m }));
+  report('open', m.appPath);
+  setTimeout(function () { location.href = m.appPath; }, 300);
+}
+
+function run(cmd) {
+  show('cmd ' + cmd);
+  if (cmd === 'tizentube') return openModule('npm/@foxreis/tizentube');
+  if (cmd === 'moonfin-page') {
+    try { tizen.application.launch('MoonfinApp.moonfin', function () { report('pagelaunch', 'ok'); }, function (e) { report('pagelaunch', e.message); }); }
+    catch (e) { report('pagelaunch', 'throw ' + e); }
+  }
+  if (cmd === 'reload') location.reload();
+}
+
+function poll() {
+  var x = new XMLHttpRequest();
+  x.open('GET', SVC + '/cmd');
+  x.onload = function () { try { var c = JSON.parse(x.responseText).cmd; if (c) run(c); } catch (e) {} setTimeout(poll, 1000); };
+  x.onerror = function () { setTimeout(poll, 2000); };
+  x.send();
+}
+
+document.addEventListener('keydown', function (e) { report('key', e.keyCode); show('key ' + e.keyCode); });
+
+report('pageTizen', typeof window.tizen);
+report('ua', navigator.userAgent);
+report('href', location.href);
+connectTB();
+poll();
+show('page loaded, tizen=' + typeof window.tizen);
+</script>
+</body>
+</html>

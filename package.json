@@ -1,0 +1,24 @@
+{
+  "name": "tvhome",
+  "appName": "Home",
+  "version": "0.1.0",
+  "description": "Custom cinematic home screen for Samsung Tizen TVs (TizenBrew app module).",
+  "packageType": "app",
+  "appPath": "app/index.html",
+  "serviceFile": "service/service.js",
+  "keys": [
+    "MediaPlayPause",
+    "MediaPlay",
+    "MediaPause",
+    "MediaStop",
+    "MediaFastForward",
+    "MediaRewind",
+    "MediaTrackNext",
+    "MediaTrackPrevious",
+    "ColorF0Red",
+    "ColorF1Green",
+    "ColorF2Yellow",
+    "ColorF3Blue"
+  ],
+  "license": "MIT"
+}
