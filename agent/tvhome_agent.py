@@ -65,7 +65,8 @@ def main():
     with open(CONFIG, encoding="utf-8-sig") as f:
         cfg = json.load(f)
     registered = False
-    backoff = 5
+    backoff = 2
+    last_problem = None
     log("agent started")
     while True:
         try:
@@ -73,24 +74,27 @@ def main():
                 request(cfg, "/pc/register", {"token": cfg["token"], "name": cfg["name"],
                                               "mac": cfg["mac"], "weather": cfg.get("weather")})
                 registered = True
-                backoff = 5
+                backoff = 2
+                last_problem = None
                 log("registered with TV")
             reply = request(cfg, f"/pc/next?token={cfg['token']}", timeout=35)
             if reply.get("cmd"):
                 do(reply["cmd"])
+            continue
         except urllib.error.HTTPError as e:
-            # 403 on /pc/next means the TV forgot us (config reset): register again.
-            registered = False
-            log(f"http {e.code}")
-            time.sleep(backoff)
-            backoff = min(backoff * 2, 60)
+            # 403 on /pc/next means the TV forgot us (Forget PC): register again.
+            # 403 on register means another key is paired; that needs Forget PC on the TV.
+            problem = f"http {e.code} on {e.url.split('8095')[-1].split('?')[0]}"
         except (urllib.error.URLError, OSError, ValueError) as e:
-            # TV off, TizenBrew closed, or the PC just woke up. Re-register on reconnect
-            # in case the service restarted and lost the agent's address.
-            registered = False
-            log(f"tv unreachable: {e}")
-            time.sleep(backoff)
-            backoff = min(backoff * 2, 60)
+            # TV off, Home/TizenBrew closed, or the PC just woke up. Re-register on
+            # reconnect in case the service restarted and lost the agent's address.
+            problem = f"tv unreachable: {e}"
+        registered = False
+        if problem != last_problem:  # log changes only, not every retry
+            log(problem)
+            last_problem = problem
+        time.sleep(backoff)
+        backoff = min(backoff * 2, 10)
 
 
 if __name__ == "__main__":

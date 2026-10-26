@@ -241,9 +241,12 @@ function wmo(code, isDay) {
 function $(id) { return document.getElementById(id); }
 function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
 
+var READS = /^\/(apps|icon|status|config)\b/;
 function api(path) {
   if (MOCK) return Promise.reject(new Error('preview'));
-  return fetch(SVC + path).then(function (r) {
+  // Actions carry X-Home; the service only accepts it from this page's origin.
+  var opts = READS.test(path) ? {} : { headers: { 'X-Home': '1' } };
+  return fetch(SVC + path, opts).then(function (r) {
     return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
   });
 }
@@ -414,7 +417,14 @@ function buildRows(apps) {
       confirmDialog('Shut down ' + pcName + '?', 'It shuts down in 15 seconds. You can cancel from this row.', 'Shut down', function () {
         cancelUntil = Date.now() + 20000; pcPower('shutdown', pcName + ' shuts down in 15 seconds'); render();
       });
-    }, { needs: 'online', danger: true })
+    }, { needs: 'online', danger: true }),
+    quick('forget', 'Forget PC', 'Unpair so the PC agent can pair again', I.cancel, function () {
+      confirmDialog('Forget ' + pcName + '?', 'The PC agent pairs again the next time it connects.', 'Forget', function () {
+        if (MOCK) return toast('Preview: would forget the PC');
+        api('/pc/forget').then(function () { toast('Forgot ' + pcName); refreshConfig(); })
+          .catch(function (e) { toast('Failed: ' + e.message); });
+      });
+    })
   ];
   if (Date.now() < cancelUntil) {
     pcRow.unshift(quick('cancel', 'Cancel', 'Stop the shutdown or restart', I.cancel, function () {
