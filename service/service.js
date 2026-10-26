@@ -1,12 +1,11 @@
 // TizenBrew runs this in a vm sandbox with `tizen` and Node's `require`.
 // It only owns the HTTP server; the handlers live in core.js, fetched from the
-// CDN so they can be reloaded without rebooting the TV.
+// CDN so they can be reloaded (GET /__reload) without rebooting the TV.
 var http = require('http');
 var https = require('https');
 var vm = require('vm');
 
 var PORT = 8095;
-var BIND = '0.0.0.0'; // spike only: lets the PC read /status. Final build binds 127.0.0.1.
 var CORE_URL = 'https://cdn.jsdelivr.net/gh/SufenueS1/tvhome@main/service/core.js';
 
 var state = { logs: [], core: null, coreError: null, loadedAt: null };
@@ -33,7 +32,11 @@ function loadCore(done) {
         clearTimeout: clearTimeout, setInterval: setInterval, clearInterval: clearInterval,
         Buffer: Buffer, process: process, module: { exports: {} }, log: log };
       vm.runInNewContext(src, sandbox);
+      if (state.core && state.core.dispose) {
+        try { state.core.dispose(); } catch (e) { log('dispose failed: ' + e); }
+      }
       state.core = sandbox.module.exports;
+      if (state.core.init) state.core.init();
       state.coreError = null;
       state.loadedAt = new Date().toISOString();
       log('core loaded');
@@ -46,17 +49,19 @@ function loadCore(done) {
   });
 }
 
-function send(res, code, obj) {
-  res.writeHead(code, {
+function send(res, code, obj, headers) {
+  var h = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type'
-  });
-  res.end(JSON.stringify(obj));
+    'Access-Control-Allow-Headers': 'Content-Type, X-Home-Key'
+  };
+  for (var k in headers || {}) h[k] = headers[k];
+  res.writeHead(code, h);
+  res.end(typeof obj === 'string' || Buffer.isBuffer(obj) ? obj : JSON.stringify(obj));
 }
 
 http.createServer(function (req, res) {
-  if (req.method === 'OPTIONS') return send(res, 204, {});
+  if (req.method === 'OPTIONS') return send(res, 204, '');
   var path = req.url.split('?')[0];
   if (path === '/__reload') {
     return loadCore(function (err) { send(res, err ? 500 : 200, { ok: !err, error: state.coreError }); });
@@ -69,6 +74,6 @@ http.createServer(function (req, res) {
     log('handler error: ' + (e && e.stack || e));
     send(res, 500, { error: String(e) });
   }
-}).listen(PORT, BIND, function () { log('listening on ' + BIND + ':' + PORT); });
+}).listen(PORT, '0.0.0.0', function () { log('listening on ' + PORT); });
 
 loadCore();

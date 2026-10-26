@@ -1,7 +1,7 @@
 {
   "name": "tvhome",
   "appName": "Home",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Custom cinematic home screen for Samsung Tizen TVs (TizenBrew app module).",
   "packageType": "app",
   "appPath": "app/index.html",

@@ -3,3 +3,4 @@ agent/config.json
 agent/*.log
 *.token
 tv_token.txt
+__pycache__/

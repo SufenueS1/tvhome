@@ -1,79 +1,722 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Home (spike)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700&display=swap" rel="stylesheet">
 <style>
-  body { background: #0b0d12; color: #e8ecf4; font: 28px/1.4 sans-serif; margin: 60px; }
-  h1 { font-size: 48px; margin: 0 0 24px; }
-  #log { font: 22px/1.35 monospace; color: #9fb0c8; white-space: pre-wrap; }
+  /* 1rem = 10px at 1920 wide; everything scales with the screen. */
+  html { font-size: calc(100vw / 192); }
+  :root {
+    --text: #f4f6fb;
+    --muted: rgba(244, 246, 251, .62);
+    --faint: rgba(244, 246, 251, .38);
+    --glass: rgba(255, 255, 255, .08);
+    --glass-strong: rgba(255, 255, 255, .16);
+    --ring: #ffffff;
+    --good: #5be39b;
+    --warn: #ffb547;
+    --bad: #ff6b6b;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a; color: var(--text);
+    font-family: Outfit, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; cursor: none; }
+
+  /* ---- backdrop ---- */
+  .bg { position: fixed; inset: 0; opacity: 0; transition: opacity .7s ease; overflow: hidden; }
+  .bg.show { opacity: 1; }
+  .bg-art { position: absolute; right: -8vw; top: -12vh; width: 72vw; height: 124vh; object-fit: cover;
+    filter: blur(4.5rem) saturate(1.5); opacity: .55; transform: scale(1.15);
+    animation: drift 40s ease-in-out infinite alternate; will-change: transform; }
+  .bg-art.mono { object-fit: contain; opacity: .35; }
+  @keyframes drift { from { transform: scale(1.15) translate(0, 0); } to { transform: scale(1.3) translate(-3vw, 2vh); } }
+  #shade { position: fixed; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(5,6,10,.92) 0%, rgba(5,6,10,.55) 38%, rgba(5,6,10,0) 70%),
+      linear-gradient(0deg, rgba(5,6,10,.95) 0%, rgba(5,6,10,.4) 34%, rgba(5,6,10,0) 55%),
+      linear-gradient(180deg, rgba(5,6,10,.6) 0%, rgba(5,6,10,0) 22%); }
+
+  /* ---- top bar ---- */
+  #top { position: fixed; left: 9rem; right: 9rem; top: 6rem; display: flex; justify-content: space-between; align-items: flex-start; }
+  #clock { font-weight: 200; font-size: 13rem; line-height: .9; letter-spacing: -.3rem; }
+  #clock small { font-size: 3.4rem; font-weight: 300; letter-spacing: 0; margin-left: 1.2rem; color: var(--muted); }
+  #date { font-size: 3rem; font-weight: 300; color: var(--muted); margin-top: 1.6rem; }
+  #greet { font-size: 2.2rem; font-weight: 400; color: var(--faint); margin-top: .6rem; letter-spacing: .1rem; }
+  #right { text-align: right; }
+  #weather { display: none; align-items: center; justify-content: flex-end; gap: 2rem; }
+  #weather.show { display: flex; }
+  #wIcon svg { width: 8rem; height: 8rem; }
+  #wTemp { font-size: 8rem; font-weight: 200; line-height: 1; }
+  #wDesc { font-size: 2.4rem; color: var(--muted); margin-top: .8rem; }
+  #wPlace { font-size: 2rem; color: var(--faint); margin-top: .4rem; }
+  #pcChip { display: none; margin-top: 2.4rem; font-size: 2rem; color: var(--muted); align-items: center; justify-content: flex-end; gap: 1rem; }
+  #pcChip.show { display: flex; }
+  #pcChip i { width: 1.2rem; height: 1.2rem; border-radius: 50%; background: var(--faint); display: inline-block; }
+  #pcChip.on i { background: var(--good); box-shadow: 0 0 1.2rem var(--good); }
+
+  /* ---- hero ---- */
+  #hero { position: fixed; left: 9rem; top: 40vh; width: 110rem; }
+  #heroTitle { font-size: 10rem; font-weight: 700; line-height: 1; letter-spacing: -.2rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #heroSub { font-size: 3rem; font-weight: 300; color: var(--muted); margin-top: 1.6rem; }
+  .swap { animation: swapIn .45s var(--ease); }
+  @keyframes swapIn { from { opacity: 0; transform: translateY(1.2rem); } to { opacity: 1; transform: none; } }
+
+  /* ---- rows ---- */
+  #rows { position: fixed; left: 0; right: 0; top: 68vh; transition: transform .45s var(--ease); }
+  .row { padding: 0 0 4rem 9rem; transition: opacity .35s ease; }
+  .row.above { opacity: 0; }
+  .row.below { opacity: .4; }
+  .row-label { font-size: 2rem; font-weight: 600; letter-spacing: .4rem; text-transform: uppercase; color: var(--faint); margin-bottom: 3rem; }
+  .row.active .row-label { color: var(--muted); }
+  .track { display: flex; gap: 2.4rem; transition: transform .4s var(--ease); }
+  .tile { position: relative; flex: none; border-radius: 1.8rem; background: var(--glass); overflow: visible;
+    transition: transform .28s var(--ease), box-shadow .28s var(--ease); }
+  .tile .face { position: absolute; inset: 0; border-radius: 1.8rem; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .tile.app { width: 30rem; height: 17rem; }
+  .tile.app img { width: 100%; height: 100%; object-fit: contain; }
+  .tile.app .mono { font-size: 7rem; font-weight: 700; color: rgba(255,255,255,.92); }
+  .tile.quick { width: 24rem; height: 13.5rem; }
+  .tile.quick .face { flex-direction: column; gap: 1.2rem; background: var(--glass); }
+  .tile.quick svg { width: 5rem; height: 5rem; }
+  .tile.quick span { font-size: 2.2rem; font-weight: 400; color: var(--muted); }
+  .tile.danger svg { color: #ff8f8f; }
+  .tile.focus { transform: scale(1.1) translateY(-.8rem); box-shadow: 0 2.4rem 6rem rgba(0,0,0,.65); z-index: 2; }
+  .tile.focus::after { content: ""; position: absolute; inset: -.6rem; border-radius: 2.3rem; border: .45rem solid var(--ring); }
+  .tile.focus.quick .face { background: var(--glass-strong); }
+  .tile.focus.quick span { color: var(--text); }
+  .tile.pulse { animation: pulse .5s ease; }
+  @keyframes pulse { 50% { transform: scale(1.02); } }
+  .tile.disabled { opacity: .35; }
+
+  /* ---- toast / dialog / saver ---- */
+  #toast { position: fixed; left: 50%; bottom: 5rem; transform: translate(-50%, 2rem); opacity: 0;
+    background: rgba(20,22,30,.94); border: .1rem solid rgba(255,255,255,.12); border-radius: 10rem;
+    padding: 1.6rem 3.6rem; font-size: 2.4rem; transition: opacity .3s, transform .3s var(--ease); white-space: nowrap; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #dialogWrap { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; }
+  #dialogWrap.show { display: flex; }
+  #dialog { width: 80rem; background: #12141c; border: .1rem solid rgba(255,255,255,.1); border-radius: 3rem; padding: 6rem; text-align: center; }
+  #dTitle { font-size: 5rem; font-weight: 600; }
+  #dBody { font-size: 2.6rem; color: var(--muted); margin-top: 2rem; line-height: 1.4; }
+  #dButtons { display: flex; gap: 3rem; justify-content: center; margin-top: 5rem; }
+  .dbtn { font-size: 2.8rem; padding: 1.8rem 5rem; border-radius: 10rem; background: var(--glass); color: var(--text); }
+  .dbtn.focus { background: #fff; color: #05060a; }
+  .dbtn.danger.focus { background: #ff6b6b; color: #fff; }
+  #saver { position: fixed; inset: 0; background: #000; display: none; }
+  #saver.show { display: block; }
+  #saverInner { position: absolute; transition: opacity 2s ease; text-align: left; }
+  #sClock { font-size: 12rem; font-weight: 200; color: rgba(255,255,255,.5); line-height: 1; }
+  #sSub { font-size: 2.6rem; color: rgba(255,255,255,.3); margin-top: 1.4rem; }
+  #devBanner { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); font-size: 1.6rem; color: var(--warn); display: none; }
 </style>
 </head>
 <body>
-<h1>Home spike</h1>
-<div>Leave this screen open. Testing is driven from the PC.</div>
-<div id="log"></div>
+<div class="bg" id="bgA"></div>
+<div class="bg" id="bgB"></div>
+<div id="shade"></div>
+
+<div id="top">
+  <div>
+    <div id="clock">--:--</div>
+    <div id="date"></div>
+    <div id="greet"></div>
+  </div>
+  <div id="right">
+    <div id="weather"><div id="wIcon"></div><div id="wTemp"></div></div>
+    <div id="wDesc"></div>
+    <div id="wPlace"></div>
+    <div id="pcChip"><i></i><span></span></div>
+  </div>
+</div>
+
+<div id="hero">
+  <div id="heroTitle"></div>
+  <div id="heroSub"></div>
+</div>
+
+<div id="rows"></div>
+<div id="toast"></div>
+<div id="dialogWrap"><div id="dialog"><div id="dTitle"></div><div id="dBody"></div><div id="dButtons"></div></div></div>
+<div id="saver"><div id="saverInner"><div id="sClock"></div><div id="sSub"></div></div></div>
+<div id="devBanner">Preview mode: mock data, actions disabled</div>
+
 <script>
-var SVC = 'http://127.0.0.1:8095';
-var logEl = document.getElementById('log');
-function show(m) { logEl.textContent = new Date().toLocaleTimeString() + '  ' + m + '\n' + logEl.textContent; }
-function report(k, v) {
-  var x = new XMLHttpRequest();
-  x.open('GET', SVC + '/report?k=' + encodeURIComponent(k) + '&v=' + encodeURIComponent(String(v)));
-  x.send();
+(function () {
+'use strict';
+
+// ---------------------------------------------------------------- setup
+
+var params = new URLSearchParams(location.search);
+var ON_TV = location.port === '8081';
+var SVC = ON_TV ? 'http://127.0.0.1:8095' : params.get('svc');
+var MOCK = !SVC;
+var SAVER_AFTER_MS = 5 * 60 * 1000;
+var TIZENTUBE = 'npm/@foxreis/tizentube';
+
+// Apps shown first, in this order. Everything else installed follows alphabetically.
+var PINNED = ['@tizentube', 'MoonfinApp.moonfin'];
+var PREFERRED = [
+  'org.tizen.netflix-app', 'org.tizen.primevideo', 'MCmYXNxgcu.DisneyPlus', 'LBUAQX1exg.Hulu',
+  'com.samsung.tv.aria-video', 'gzcc4LRFBF.Peacock', 'rJyOSqC6Up.CBSAllAccess', 'PvWgqxV3Xa.YouTubeTV',
+  'ZmmGjO6VKO.slingtv', 'XtU8fQk2gN.ESPN', 'Jz7aUrV2Q4.Twitch', 'rJeHak5zRg.Spotify',
+  'OGLLvqej7u.CrunchyrollWebApp', 'Ob3XhAVMu6.amcplus', '3KA0pm7a7V.TubiTV', 'OK2Rdkjmsi.IMDbTV',
+  'w0wZu3xkQq.GeForceNOW', 'GHI3a0zMSx.XboxGamePass', 'org.tizen.browser'
+];
+// Samsung system apps are hidden by prefix; these are the extras shown anyway.
+var SYSTEM_ALLOW = { 'org.tizen.netflix-app': 1, 'org.tizen.primevideo': 1, 'com.samsung.tv.aria-video': 1, 'org.tizen.browser': 1 };
+// Preinstalled promo/bloat, plus the stock YouTube app (TizenTube replaces it).
+var HIDDEN = {
+  '9Ur5IzDKqV.TizenYouTube': 1, 'HupEmjIB4I.Glance': 1, 'LImG0QPABV.QXHMarketplace': 1, '9TYrsHWbaB.klyq': 1,
+  'QMZlIHL7Pp.BlacknutSmgPromo': 1, 'KMZlIHL7Pp.Blacknut1wO': 1, 'jAfAs7yVDX.TheSix': 1, 'CmeyUlnhYY.LunaWebApp': 1,
+  'MiUDVawh7P.UtomikTizen': 1, 'niYSnzL6h1.Viaplay': 1, '4j8Nf2XKwh.basic': 1, 'WYvNuMClVw.FunimationWebApp': 1,
+  '70fRFUwYlD.OtterGAProd': 1, 'Rk72oKFsRS.OtterKidsProd': 1, '9FhM0cODbY.TikTokTV': 1, 'zigzSWa1hy.InstagramAirwave': 1,
+  'IewQEY143t.GoogleDuoWeb': 1, 'AQKO41xyKP.AmazonAlexa': 1, 'xWoxak64Je.xtv': 1, '2022ePop01.SmartTV': 1,
+  'J9fZJDMi1v.SecurityCenter': 1, 'xvvl3S1bvH.TizenBrewStandalone': 1, 'd0m1lV1nt2.emanual': 1, 'MoonfinApp.service': 1
+};
+var NAMES = {
+  'MoonfinApp.moonfin': 'Moonfin', 'rJeHak5zRg.Spotify': 'Spotify', '3KA0pm7a7V.TubiTV': 'Tubi',
+  'com.samsung.tv.aria-video': 'Apple TV', 'gzcc4LRFBF.Peacock': 'Peacock', 'org.tizen.browser': 'Internet',
+  'GHI3a0zMSx.XboxGamePass': 'Xbox', 'OK2Rdkjmsi.IMDbTV': 'Freevee'
+};
+var TAGLINES = {
+  '@tizentube': 'Ad-free and sponsor-free, thanks to TizenTube',
+  'MoonfinApp.moonfin': 'Your Jellyfin library',
+  'org.tizen.netflix-app': 'Movies and series', 'org.tizen.primevideo': 'Prime Video',
+  'MCmYXNxgcu.DisneyPlus': 'Disney, Pixar, Marvel, Star Wars', 'LBUAQX1exg.Hulu': 'TV, movies and originals',
+  'com.samsung.tv.aria-video': 'Apple Originals', 'Jz7aUrV2Q4.Twitch': 'Live streams',
+  'rJeHak5zRg.Spotify': 'Music and podcasts', 'w0wZu3xkQq.GeForceNOW': 'Cloud gaming',
+  'GHI3a0zMSx.XboxGamePass': 'Cloud gaming with Game Pass', 'PvWgqxV3Xa.YouTubeTV': 'Live TV',
+  'XtU8fQk2gN.ESPN': 'Live sports', 'OGLLvqej7u.CrunchyrollWebApp': 'Anime', 'org.tizen.browser': 'Browse the web'
+};
+
+// ---------------------------------------------------------------- icons
+
+var I = {
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg>',
+  hdmi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 8h18v5l-3 3H6l-3-3z"/><path d="M7 11h10"/></svg>',
+  source: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 20v-4M8 20h8M10 8l2 2-2 2"/></svg>',
+  wake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',
+  sleep: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/></svg>',
+  power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  cancel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
+  saver: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M11 3l1.8 4.7 4.7 1.8-4.7 1.8L11 16l-1.8-4.7L4.5 9.5l4.7-1.8z"/><path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>',
+  reload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.6M20 4v4.6h-4.6M20 12a8 8 0 0 1-13.7 5.7L4 15.4M4 20v-4.6h4.6"/></svg>',
+  tvoff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M10 8l4 4M14 8l-4 4"/></svg>'
+};
+
+var W = {
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd36b" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="4.2" fill="#ffd36b" fill-opacity=".25"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="#cfd8ff" stroke-width="1.4" stroke-linejoin="round"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z" fill="#cfd8ff" fill-opacity=".18"/></svg>',
+  partly: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="8.5" r="3.2" stroke="#ffd36b" fill="#ffd36b" fill-opacity=".25"/><path d="M8.5 2.5v1.4M2.5 8.5h1.4M4.3 4.3l1 1M12.7 4.3l-1 1" stroke="#ffd36b"/><path d="M8 19h9a3.5 3.5 0 0 0 .4-7A5 5 0 0 0 8 13.5 2.8 2.8 0 0 0 8 19z" stroke="#e8edf7" fill="#05060a"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.4" stroke-linejoin="round"><path d="M7 18.5h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.3 2A3 3 0 0 0 7 18.5z" fill="#e8edf7" fill-opacity=".12"/></svg>',
+  fog: '<svg viewBox="0 0 24 24" fill="none" stroke="#c9d2e3" stroke-width="1.4" stroke-linecap="round"><path d="M4 9h16M3 13h18M5 17h14"/></svg>',
+  rain: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.3 2A3 3 0 0 0 7 14.5z" stroke="#e8edf7" fill="#e8edf7" fill-opacity=".12"/><path d="M8 17.5l-1 2.5M12 17.5l-1 2.5M16 17.5l-1 2.5" stroke="#7cc4ff"/></svg>',
+  snow: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.3 2A3 3 0 0 0 7 14.5z" stroke="#e8edf7" fill="#e8edf7" fill-opacity=".12"/><path d="M8 18.5h.01M12 18.5h.01M16 18.5h.01M10 21h.01M14 21h.01" stroke="#ffffff" stroke-width="2.2"/></svg>',
+  storm: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.3 2A3 3 0 0 0 7 14.5z" stroke="#e8edf7" fill="#e8edf7" fill-opacity=".12"/><path d="M12.5 15l-2 3.5h3l-2 3.5" stroke="#ffd36b"/></svg>'
+};
+
+// WMO weather codes used by Open-Meteo.
+function wmo(code, isDay) {
+  if (code === 0) return [isDay ? 'sun' : 'moon', 'Clear'];
+  if (code === 1) return [isDay ? 'sun' : 'moon', 'Mostly clear'];
+  if (code === 2) return ['partly', 'Partly cloudy'];
+  if (code === 3) return ['cloud', 'Overcast'];
+  if (code === 45 || code === 48) return ['fog', 'Fog'];
+  if (code >= 51 && code <= 57) return ['rain', 'Drizzle'];
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return ['rain', code >= 65 && code !== 80 ? 'Heavy rain' : 'Rain'];
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return ['snow', 'Snow'];
+  if (code >= 95) return ['storm', 'Thunderstorms'];
+  return ['cloud', 'Cloudy'];
 }
 
-var modules = [];
-var tb = null;
-function connectTB() {
-  tb = new WebSocket('ws://127.0.0.1:8081');
-  tb.onopen = function () { show('tb ws open'); tb.send(JSON.stringify({ type: 4, payload: false })); };
-  tb.onmessage = function (ev) {
-    var msg = JSON.parse(ev.data);
-    if (msg.type === 4) {
-      modules = msg.payload || [];
-      var names = modules.map(function (m) { return m.fullName + ':' + m.packageType; }).join(',');
-      show('modules: ' + names); report('modules', names);
-    } else { report('tbmsg' + msg.type, JSON.stringify(msg.payload).slice(0, 200)); }
-  };
-  tb.onerror = function () { show('tb ws error'); report('tbws', 'error'); };
+// ---------------------------------------------------------------- helpers
+
+function $(id) { return document.getElementById(id); }
+function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+
+function api(path) {
+  if (MOCK) return Promise.reject(new Error('preview'));
+  return fetch(SVC + path).then(function (r) {
+    return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+  });
 }
 
-function openModule(fullName) {
-  var m = modules.filter(function (x) { return x.fullName === fullName; })[0];
-  if (!m) { report('open', 'missing ' + fullName); return; }
-  try { (m.keys || []).forEach(function (k) { tizen.tvinputdevice.registerKey(k); }); } catch (e) { report('keys', String(e)); }
-  tb.send(JSON.stringify({ type: 5, payload: m }));
-  report('open', m.appPath);
-  setTimeout(function () { location.href = m.appPath; }, 300);
+var toastTimer;
+function toast(msg, ms) {
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, ms || 3200);
 }
 
-function run(cmd) {
-  show('cmd ' + cmd);
-  if (cmd === 'tizentube') return openModule('npm/@foxreis/tizentube');
-  if (cmd === 'moonfin-page') {
-    try { tizen.application.launch('MoonfinApp.moonfin', function () { report('pagelaunch', 'ok'); }, function (e) { report('pagelaunch', e.message); }); }
-    catch (e) { report('pagelaunch', 'throw ' + e); }
+function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
+function hsl(h, s, l) { return 'hsl(' + h + ',' + s + '%,' + l + '%)'; }
+
+// ---------------------------------------------------------------- colors from icons
+
+var colorCache = {};
+function iconColors(img, id) {
+  if (colorCache[id]) return colorCache[id];
+  var out = null;
+  try {
+    var c = document.createElement('canvas');
+    c.width = c.height = 24;
+    var x = c.getContext('2d');
+    x.drawImage(img, 0, 0, 24, 24);
+    var d = x.getImageData(0, 0, 24, 24).data;
+    var edge = [0, 0, 0, 0], best = null, bestScore = -1;
+    for (var i = 0; i < d.length; i += 4) {
+      var p = i / 4, px = p % 24, py = (p / 24) | 0;
+      var r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
+      if ((px < 2 || px > 21 || py < 2 || py > 21) && a > 200) { edge[0] += r; edge[1] += g; edge[2] += b; edge[3]++; }
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      var score = (mx - mn) * (a / 255) * (mx > 40 ? 1 : .2);
+      if (score > bestScore) { bestScore = score; best = [r, g, b]; }
+    }
+    var tile = edge[3] > 20 ? 'rgb(' + [edge[0] / edge[3] | 0, edge[1] / edge[3] | 0, edge[2] / edge[3] | 0] + ')' : null;
+    var accent = best && bestScore > 30 ? 'rgb(' + best.join(',') + ')' : null;
+    out = { tile: tile, accent: accent };
+  } catch (e) { out = { tile: null, accent: null }; }
+  colorCache[id] = out;
+  return out;
+}
+
+// ---------------------------------------------------------------- backdrop
+
+var bgFront = $('bgA'), bgBack = $('bgB'), bgKey = null;
+function setBackdrop(key, accent, art, mono) {
+  if (key === bgKey) return;
+  bgKey = key;
+  var a = accent || '#3a4a7a';
+  var b = bgBack;
+  b.style.background =
+    'radial-gradient(ellipse 70% 80% at 78% 30%, ' + a + ' 0%, rgba(0,0,0,0) 62%),' +
+    'radial-gradient(ellipse 60% 60% at 30% 100%, ' + a + ' 0%, rgba(0,0,0,0) 70%),' +
+    'linear-gradient(160deg, #0d0f17 0%, #05060a 100%)';
+  b.innerHTML = '';
+  if (art) {
+    var img = el('img', 'bg-art' + (mono ? ' mono' : ''));
+    img.crossOrigin = 'anonymous';
+    img.src = art;
+    b.appendChild(img);
   }
-  if (cmd === 'reload') location.reload();
+  b.style.opacity = '';
+  b.classList.add('show');
+  bgFront.classList.remove('show');
+  bgBack = bgFront;
+  bgFront = b;
 }
 
-function poll() {
-  var x = new XMLHttpRequest();
-  x.open('GET', SVC + '/cmd');
-  x.onload = function () { try { var c = JSON.parse(x.responseText).cmd; if (c) run(c); } catch (e) {} setTimeout(poll, 1000); };
-  x.onerror = function () { setTimeout(poll, 2000); };
-  x.send();
+// ---------------------------------------------------------------- TizenBrew modules (TizenTube)
+
+var tb = { ws: null, modules: [] };
+function connectTizenBrew() {
+  if (!ON_TV) return;
+  try {
+    tb.ws = new WebSocket('ws://127.0.0.1:8081');
+    tb.ws.onopen = function () { tb.ws.send(JSON.stringify({ type: 4, payload: false })); };
+    tb.ws.onmessage = function (ev) {
+      var msg = JSON.parse(ev.data);
+      if (msg.type === 4) tb.modules = msg.payload || [];
+    };
+    tb.ws.onclose = function () { setTimeout(connectTizenBrew, 3000); };
+  } catch (e) { setTimeout(connectTizenBrew, 3000); }
+}
+function openModule(fullName) {
+  var m = tb.modules.filter(function (x) { return x.fullName === fullName; })[0];
+  if (!m || !tb.ws || tb.ws.readyState !== 1) { toast('TizenBrew isn’t ready yet, try again'); return; }
+  tb.ws.send(JSON.stringify({ type: 5, payload: m }));
+  setTimeout(function () { location.href = m.appPath; }, 150);
 }
 
-document.addEventListener('keydown', function (e) { report('key', e.keyCode); show('key ' + e.keyCode); });
+// ---------------------------------------------------------------- model
 
-report('pageTizen', typeof window.tizen);
-report('ua', navigator.userAgent);
-report('href', location.href);
-connectTB();
-poll();
-show('page loaded, tizen=' + typeof window.tizen);
+var rows = [];      // [{label, tiles:[{...}], el, track}]
+var cur = { row: 0, col: [0, 0, 0, 0] };
+var pcState = { paired: false, online: false, name: 'PC', canWake: false };
+var cancelUntil = 0;
+
+function appTile(a) {
+  return {
+    kind: 'app', key: a.id, title: NAMES[a.id] || a.name, sub: TAGLINES[a.id] || '',
+    icon: SVC && a.id.charAt(0) !== '@' ? SVC + '/icon?id=' + encodeURIComponent(a.id) : null,
+    run: function () {
+      if (a.id === '@tizentube') return openModule(TIZENTUBE);
+      if (MOCK) return toast('Preview: would open ' + (NAMES[a.id] || a.name));
+      toast('Opening ' + (NAMES[a.id] || a.name) + '…', 2000);
+      api('/launch?id=' + encodeURIComponent(a.id)).catch(function (e) { toast('Couldn’t open it: ' + e.message); });
+    }
+  };
+}
+
+function sortApps(list) {
+  var byId = {};
+  list.forEach(function (a) { byId[a.id] = a; });
+  var visible = list.filter(function (a) {
+    if (HIDDEN[a.id] || PINNED.indexOf(a.id) >= 0) return false;
+    if (/^(com\.samsung\.|org\.tizen\.|org\.volt\.)/.test(a.id) && !SYSTEM_ALLOW[a.id]) return false;
+    return true;
+  });
+  var pinned = [{ id: '@tizentube', name: 'YouTube' }];
+  if (byId['MoonfinApp.moonfin'] || MOCK) pinned.push(byId['MoonfinApp.moonfin'] || { id: 'MoonfinApp.moonfin', name: 'Moonfin' });
+  visible.sort(function (x, y) {
+    var px = PREFERRED.indexOf(x.id), py = PREFERRED.indexOf(y.id);
+    if (px < 0) px = 999; if (py < 0) py = 999;
+    if (px !== py) return px - py;
+    return (NAMES[x.id] || x.name).localeCompare(NAMES[y.id] || y.name);
+  });
+  return pinned.concat(visible);
+}
+
+function quick(key, title, sub, icon, run, extra) {
+  var t = { kind: 'quick', key: key, title: title, sub: sub, svg: icon, run: run };
+  for (var k in extra || {}) t[k] = extra[k];
+  return t;
+}
+
+function tvKey(k, label) {
+  if (MOCK) return toast('Preview: would send ' + label);
+  var slow = setTimeout(function () { toast('If the TV asks, choose Allow for “Home”', 8000); }, 1500);
+  api('/tv/key?k=' + k).then(function () { clearTimeout(slow); toast(label); })
+    .catch(function (e) { clearTimeout(slow); toast('Couldn’t switch: ' + e.message, 5000); });
+}
+
+function pcPower(action, done) {
+  if (action === 'shutdown' || action === 'restart') setTimeout(render, 20500); // drop the Cancel tile
+  if (MOCK) return toast('Preview: would ' + action + ' the PC');
+  api('/pc/power?action=' + action).then(function () { toast(done); })
+    .catch(function (e) { toast(e.message === 'PC is offline' ? pcState.name + ' isn’t connected' : 'Failed: ' + e.message, 4500); });
+}
+
+function buildRows(apps) {
+  var pcName = pcState.name || 'PC';
+  var pcRow = [
+    quick('wake', 'Wake ' + pcName, 'Sends a Wake-on-LAN packet', I.wake, function () {
+      if (MOCK) return toast('Preview: would wake the PC');
+      api('/pc/wake').then(function () { toast('Waking ' + pcName + '…'); }).catch(function (e) { toast('Couldn’t wake: ' + e.message); });
+    }, { needs: 'wake' }),
+    quick('sleep', 'Sleep', 'Put ' + pcName + ' to sleep', I.sleep, function () { pcPower('sleep', pcName + ' is going to sleep'); }, { needs: 'online' }),
+    quick('lock', 'Lock', 'Lock ' + pcName, I.lock, function () { pcPower('lock', pcName + ' locked'); }, { needs: 'online' }),
+    quick('restart', 'Restart', 'Restart ' + pcName + ' in 15 seconds', I.restart, function () {
+      confirmDialog('Restart ' + pcName + '?', 'It restarts in 15 seconds. You can cancel from this row.', 'Restart', function () {
+        cancelUntil = Date.now() + 20000; pcPower('restart', pcName + ' restarts in 15 seconds'); render();
+      });
+    }, { needs: 'online' }),
+    quick('shutdown', 'Shut down', 'Turn off ' + pcName + ' in 15 seconds', I.power, function () {
+      confirmDialog('Shut down ' + pcName + '?', 'It shuts down in 15 seconds. You can cancel from this row.', 'Shut down', function () {
+        cancelUntil = Date.now() + 20000; pcPower('shutdown', pcName + ' shuts down in 15 seconds'); render();
+      });
+    }, { needs: 'online', danger: true })
+  ];
+  if (Date.now() < cancelUntil) {
+    pcRow.unshift(quick('cancel', 'Cancel', 'Stop the shutdown or restart', I.cancel, function () {
+      cancelUntil = 0; pcPower('cancel', 'Cancelled'); render();
+    }));
+  }
+
+  var inputs = [1, 2, 3, 4].map(function (n) {
+    return quick('hdmi' + n, 'HDMI ' + n, 'Switch the TV to HDMI ' + n, I.hdmi, function () { tvKey('KEY_HDMI' + n, 'HDMI ' + n); });
+  });
+  inputs.push(quick('source', 'Sources', 'Open the TV’s source list', I.source, function () { tvKey('KEY_SOURCE', 'Sources'); }));
+
+  var tv = [
+    quick('saver', 'Screensaver', 'Dim the screen now', I.saver, function () { showSaver(); }),
+    quick('reload', 'Reload Home', 'Fetch the latest version', I.reload, function () { location.reload(); }),
+    quick('tvoff', 'Turn TV off', 'Power off the TV', I.tvoff, function () { tvKey('KEY_POWER', 'Turning off'); })
+  ];
+
+  var defs = [
+    { label: 'Apps', tiles: apps.map(appTile) },
+    { label: 'Inputs', tiles: inputs },
+    { label: pcState.paired ? pcName : 'PC', tiles: pcRow },
+    { label: 'TV', tiles: tv }
+  ];
+  return defs;
+}
+
+// ---------------------------------------------------------------- render
+
+var appsList = [];
+function render() {
+  var keepKey = rows[cur.row] && rows[cur.row].tiles[cur.col[cur.row]] && rows[cur.row].tiles[cur.col[cur.row]].key;
+  var defs = buildRows(appsList);
+  var box = $('rows');
+  box.innerHTML = '';
+  rows = defs.map(function (d, ri) {
+    var r = el('div', 'row');
+    r.appendChild(el('div', 'row-label', d.label));
+    var track = el('div', 'track');
+    d.tiles.forEach(function (t, ci) {
+      var node = el('div', 'tile ' + t.kind + (t.danger ? ' danger' : ''));
+      var face = el('div', 'face');
+      if (t.kind === 'app') {
+        var seed = hash(t.key);
+        face.style.background = 'linear-gradient(135deg,' + hsl(seed % 360, 45, 30) + ',' + hsl((seed + 40) % 360, 50, 18) + ')';
+        if (t.key === '@tizentube') {
+          face.style.background = 'linear-gradient(135deg,#ff2d2d,#b00000)';
+          face.innerHTML = '<div style="width:9rem;height:9rem;color:#fff">' + I.play + '</div>';
+        } else if (t.icon) {
+          var img = el('img');
+          img.crossOrigin = 'anonymous';
+          img.onload = function () {
+            var c = iconColors(img, t.key);
+            if (c.tile) face.style.background = c.tile;
+            t.accent = c.accent || c.tile;
+            if (rows[cur.row] && rows[cur.row].tiles[cur.col[cur.row]] === t) focusChanged(true);
+          };
+          img.onerror = function () { face.innerHTML = '<div class="mono">' + t.title.charAt(0) + '</div>'; };
+          img.src = t.icon;
+          face.appendChild(img);
+        } else {
+          face.innerHTML = '<div class="mono">' + t.title.charAt(0) + '</div>';
+        }
+        t.fallbackAccent = hsl(hash(t.key) % 360, 60, 38);
+      } else {
+        face.innerHTML = t.svg + '<span>' + t.title + '</span>';
+      }
+      node.appendChild(face);
+      t.el = node;
+      track.appendChild(node);
+      if (keepKey && t.key === keepKey && ri === cur.row) cur.col[ri] = ci;
+    });
+    r.appendChild(track);
+    box.appendChild(r);
+    return { label: d.label, tiles: d.tiles, el: r, track: track };
+  });
+  rows.forEach(function (r, i) { cur.col[i] = Math.min(cur.col[i] || 0, r.tiles.length - 1); });
+  updateAvailability();
+  layout();
+  focusChanged(true);
+}
+
+function updateAvailability() {
+  rows.forEach(function (r) {
+    r.tiles.forEach(function (t) {
+      var off = (t.needs === 'online' && !pcState.online) || (t.needs === 'wake' && !pcState.canWake);
+      t.disabled = off;
+      t.el.classList.toggle('disabled', off);
+    });
+  });
+}
+
+function layout() {
+  rows.forEach(function (r, i) {
+    r.el.classList.toggle('active', i === cur.row);
+    r.el.classList.toggle('above', i < cur.row);
+    r.el.classList.toggle('below', i > cur.row);
+  });
+  var active = rows[cur.row];
+  $('rows').style.transform = 'translateY(' + (-active.el.offsetTop) + 'px)';
+  // Scroll the row only when the focused tile would leave the screen.
+  var tile = active.tiles[cur.col[cur.row]];
+  var vw = window.innerWidth, pad = active.track.getBoundingClientRect().left + (active.shift || 0);
+  var shift = active.shift || 0;
+  var left = tile.el.offsetLeft, right = left + tile.el.offsetWidth;
+  if (right - shift > vw - pad * 2) shift = right - (vw - pad * 2);
+  if (left - shift < 0) shift = left;
+  active.shift = shift;
+  active.track.style.transform = 'translateX(' + (-shift) + 'px)';
+  document.querySelectorAll('.tile.focus').forEach(function (n) { n.classList.remove('focus'); });
+  tile.el.classList.add('focus');
+}
+
+var lastHeroKey = null;
+function focusChanged(force) {
+  var r = rows[cur.row];
+  var t = r.tiles[cur.col[cur.row]];
+  if (!force && t.key === lastHeroKey) return;
+  var newKey = t.key !== lastHeroKey;
+  lastHeroKey = t.key;
+  if (newKey) {
+    $('heroTitle').textContent = t.title;
+    $('heroSub').textContent = t.disabled ? (t.needs === 'wake' ? 'Wake-on-LAN isn’t set up yet' : pcState.name + ' isn’t connected') : t.sub;
+    var hero = $('hero');
+    hero.classList.remove('swap'); void hero.offsetWidth; hero.classList.add('swap');
+  }
+  if (t.kind === 'app') {
+    var accent = t.key === '@tizentube' ? '#d11a1a' : (t.accent || t.fallbackAccent);
+    setBackdrop(t.key + '|' + accent, accent, t.icon, false);
+  } else {
+    var tone = { Inputs: '#2b5bd7', TV: '#6a3fd1' }[r.label] || '#14806a';
+    setBackdrop('row:' + r.label, tone, null, false);
+  }
+}
+
+// ---------------------------------------------------------------- dialog
+
+var dialog = null;
+function confirmDialog(title, body, okLabel, onOk) {
+  $('dTitle').textContent = title;
+  $('dBody').textContent = body;
+  var bs = $('dButtons');
+  bs.innerHTML = '';
+  var cancel = el('div', 'dbtn', 'Cancel');
+  var ok = el('div', 'dbtn danger', okLabel);
+  bs.appendChild(cancel); bs.appendChild(ok);
+  dialog = { buttons: [cancel, ok], idx: 0, onOk: onOk };
+  paintDialog();
+  $('dialogWrap').classList.add('show');
+}
+function paintDialog() { dialog.buttons.forEach(function (b, i) { b.classList.toggle('focus', i === dialog.idx); }); }
+function closeDialog() { dialog = null; $('dialogWrap').classList.remove('show'); }
+
+// ---------------------------------------------------------------- screensaver (OLED care)
+
+var idleTimer, saverMove;
+function showSaver() {
+  $('saver').classList.add('show');
+  moveSaver();
+  clearInterval(saverMove);
+  saverMove = setInterval(moveSaver, 45000);
+}
+function moveSaver() {
+  var s = $('saverInner');
+  s.style.opacity = 0;
+  setTimeout(function () {
+    s.style.left = (5 + Math.random() * 55) + 'vw';
+    s.style.top = (8 + Math.random() * 58) + 'vh';
+    updateClock();
+    s.style.opacity = 1;
+  }, 2100);
+}
+function hideSaver() { $('saver').classList.remove('show'); clearInterval(saverMove); }
+function resetIdle() { clearTimeout(idleTimer); idleTimer = setTimeout(showSaver, SAVER_AFTER_MS); }
+
+// ---------------------------------------------------------------- input
+
+// Returns true when the key was handled.
+function handleKey(k) {
+  resetIdle();
+  if ($('saver').classList.contains('show')) { hideSaver(); return true; }
+  if (!rows.length) return false;
+  if (dialog) {
+    if (k === 37 || k === 39) { dialog.idx = 1 - dialog.idx; paintDialog(); }
+    else if (k === 13) { var d = dialog; closeDialog(); if (d.idx === 1) d.onOk(); }
+    else if (k === 10009 || k === 27 || k === 8) closeDialog();
+    return true;
+  }
+  var r = rows[cur.row];
+  if (k === 37) { if (cur.col[cur.row] > 0) cur.col[cur.row]--; }
+  else if (k === 39) { if (cur.col[cur.row] < r.tiles.length - 1) cur.col[cur.row]++; }
+  else if (k === 38) { if (cur.row > 0) cur.row--; }
+  else if (k === 40) { if (cur.row < rows.length - 1) cur.row++; }
+  else if (k === 13) {
+    var t = r.tiles[cur.col[cur.row]];
+    if (t.disabled) { toast(t.needs === 'wake' ? 'Wake-on-LAN isn’t set up yet' : pcState.name + ' isn’t connected'); }
+    else { t.el.classList.remove('pulse'); void t.el.offsetWidth; t.el.classList.add('pulse'); t.run(); }
+    return true;
+  }
+  else if (k === 10009 || k === 27 || k === 8) { cur.row = 0; } // Back: return to the apps row
+  else if (k === 403) { location.reload(); return true; }        // red button
+  else return false;
+  layout();
+  focusChanged(false);
+  return true;
+}
+document.addEventListener('keydown', function (e) { if (handleKey(e.keyCode)) e.preventDefault(); });
+
+// ---------------------------------------------------------------- clock & weather
+
+function updateClock() {
+  var d = new Date();
+  var h = d.getHours(), m = d.getMinutes();
+  var hh = (h % 12) || 12, mm = (m < 10 ? '0' : '') + m, ap = h < 12 ? 'AM' : 'PM';
+  $('clock').innerHTML = hh + ':' + mm + '<small>' + ap + '</small>';
+  $('sClock').textContent = hh + ':' + mm;
+  $('date').textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  $('greet').textContent = h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : h < 22 ? 'Good evening' : 'Good night';
+}
+
+var weatherCfg = null;
+function updateWeather() {
+  if (!weatherCfg) return;
+  var u = 'https://api.open-meteo.com/v1/forecast?latitude=' + weatherCfg.lat + '&longitude=' + weatherCfg.lon +
+    '&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto&forecast_days=1';
+  fetch(u).then(function (r) { return r.json(); }).then(function (j) {
+    var c = j.current, w = wmo(c.weather_code, c.is_day);
+    $('wIcon').innerHTML = W[w[0]];
+    $('wTemp').textContent = Math.round(c.temperature_2m) + '°';
+    $('wDesc').textContent = w[1] + '  ·  H ' + Math.round(j.daily.temperature_2m_max[0]) + '°  L ' + Math.round(j.daily.temperature_2m_min[0]) + '°';
+    $('wPlace').textContent = weatherCfg.label || '';
+    $('weather').classList.add('show');
+    $('sSub').textContent = Math.round(c.temperature_2m) + '°  ' + w[1];
+  }).catch(function () {});
+}
+
+function updatePcChip() {
+  var chip = $('pcChip');
+  chip.classList.toggle('show', pcState.paired);
+  chip.classList.toggle('on', pcState.online);
+  chip.querySelector('span').textContent = pcState.name + (pcState.online ? ' online' : ' offline');
+}
+
+function refreshConfig() {
+  if (MOCK) {
+    pcState = { paired: true, online: true, name: 'DAWSON', canWake: true };
+    weatherCfg = weatherCfg || { lat: 40.71, lon: -74.01, label: 'Preview' };
+    updatePcChip();
+    return Promise.resolve();
+  }
+  return api('/config').then(function (c) {
+    var before = pcState.online + '|' + pcState.paired;
+    if (c.pc) pcState = { paired: true, online: !!c.pc.online, name: c.pc.name || 'PC', canWake: !!c.pc.canWake };
+    var hadWeather = !!weatherCfg;
+    if (c.weather) weatherCfg = c.weather;
+    if (!hadWeather && weatherCfg) updateWeather();
+    updatePcChip();
+    if (before !== pcState.online + '|' + pcState.paired && rows.length) { updateAvailability(); render(); }
+  }).catch(function () {});
+}
+
+// ---------------------------------------------------------------- dev hooks
+
+function pollCommands() {
+  api('/cmd').then(function (j) {
+    if (j.cmd === 'reload') location.reload();
+    else if (j.cmd === 'tizentube') openModule(TIZENTUBE);
+    else if (j.cmd && j.cmd.indexOf('key:') === 0) handleKey(+j.cmd.slice(4));
+  }).catch(function () {}).then(function () { setTimeout(pollCommands, 2000); });
+}
+
+// ---------------------------------------------------------------- boot
+
+function loadApps() {
+  var p = MOCK ? Promise.resolve([
+    { id: 'MoonfinApp.moonfin', name: 'Moonfin' }, { id: 'org.tizen.netflix-app', name: 'Netflix' },
+    { id: 'org.tizen.primevideo', name: 'Prime Video' }, { id: 'MCmYXNxgcu.DisneyPlus', name: 'Disney+' },
+    { id: 'LBUAQX1exg.Hulu', name: 'Hulu' }, { id: 'rJeHak5zRg.Spotify', name: 'Spotify - Music and Podcasts' },
+    { id: 'Jz7aUrV2Q4.Twitch', name: 'Twitch' }, { id: 'HupEmjIB4I.Glance', name: 'Glance' },
+    { id: 'com.samsung.tv.store', name: 'Apps' }, { id: 'w0wZu3xkQq.GeForceNOW', name: 'GeForce NOW' }
+  ]) : api('/apps');
+  return p.then(function (list) { appsList = sortApps(list); })
+    .catch(function () { appsList = sortApps([]); });
+}
+
+if (MOCK) $('devBanner').style.display = 'block';
+updateClock();
+setInterval(updateClock, 10000);
+resetIdle();
+connectTizenBrew();
+refreshConfig().then(loadApps).then(function () {
+  render();
+  if (weatherCfg) updateWeather();
+});
+setInterval(updateWeather, 15 * 60 * 1000);
+setInterval(refreshConfig, 15000);
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) { updateClock(); refreshConfig(); loadApps().then(render); }
+});
+if (!MOCK) pollCommands();
+window.addEventListener('resize', function () { if (rows.length) layout(); });
+})();
 </script>
 </body>
 </html>
